@@ -1,56 +1,55 @@
-// A simple program which takes a set of axioms and
-// and draws conclusions from them. If the axioms are
-// not self consistent the program will not crash but
-// will return contradicting conclusions
+(* 
+ * A simple program which takes a set of axioms and draws conclusions from them
+ * If the axioms are not self consistent the program will not crash but it will
+ * return contradicting conclusions. If the contradictory axioms are not used 
+ * in drawing conclusions no warning will be presented.
+ *) 
 
-//
-// Convenience functions
-//
+(*
+ * Convenience functions
+ *)
 
-let print_set x = 
-    let max_el = x |> Set.maxElement
-    printf "{"
-    (x-(Set.singleton max_el)) |> Set.iter(fun el -> printf "%O, " el)
-    printfn "%O}" max_el
+let print_set (x: Set<'a>) = 
+    if x.Count>0 then
+        let max_el = x |> Set.maxElement
+        printf "{"
+        (x-(Set.singleton max_el)) |> Set.iter(fun el -> printf "%O, " el)
+        printfn "%O}" max_el
+    else
+        printfn "Ø"
 
 // repeatedly apply a function to data until the output does not change
 let rec repeat func (data : Set<'a>) =
     let out = func data
 
-    if out=data then
+    if (data+out)=data then
         out
     else
-        func (data + out)
+        repeat func (data + out)
 
-//
-// The main program
-//
+(*
+ * The main program
+ *)
 
 type Predicate = { Name : string; Desc : string }
-
-// assume things are either plants or animals
-let pred_A = { Name="H"; Desc="a human" }
-let pred_B = { Name="P"; Desc="a plant" }
-let pred_C = { Name="A"; Desc="an animal" }
-let pred_D = { Name="S"; Desc="a sunflower" }
 
 type Statement = 
     | Assert of Predicate // for asserting a predicate is true, i.e. turning a predicate into a statement
     | Not of Statement
+    | And of Statement * Statement
+    | Or of Statement * Statement // inclusive or
     | Implies of Statement * Statement
+    | Equivalent of Statement * Statement // i.e. implies and is implied by
     | Null
     override this.ToString() = 
         match this with
         | Assert P -> P.Name
         | Not S -> "¬" + S.ToString()
+        | And (S1,S2) -> "(" + S1.ToString() + " & " + S2.ToString() + ")"
+        | Or (S1,S2) -> "(" + S1.ToString() + " | " + S2.ToString() + ")"
         | Implies (S1,S2) -> S1.ToString() + " => " + S2.ToString()
+        | Equivalent (S1,S2) -> S1.ToString() + " <=> " + S2.ToString()
         | Null -> "Ø"
-    member this.ToSentence() = 
-        match this with
-        | Assert P -> P.Desc
-        | Not S -> "not " + S.ToSentence()
-        | Implies (S1,S2) -> S1.ToSentence() + " implies " + S2.ToSentence()
-        | Null -> "Null"
 
 // removes double negations
 let rec simplify S = 
@@ -76,43 +75,67 @@ let converse S =
     | Implies (S1,S2) -> Implies (simplify S2, simplify S1)
     | _ -> Null
 
-// TODO: finish
-let contradiction s1 s2 =
-    match s1,s2 with
-    | Assert(p1),Not(Assert(p2)) when p1=p2 -> true
-    | _ -> false
+// expands equivalencies and "or"s to two implications, i.e. {A<=>B} -> {A=>B,B=>A}
+let expand statements =
+    let equivalencies = statements |> Set.filter( fun s -> match s with | Equivalent(s1,s2) -> true | _ -> false )
+    let others = statements - equivalencies // set diff
+    others + ( Set.fold( fun acc eq -> acc + (match eq with | Equivalent(s1,s2) -> Set.ofList [Implies(s1,s2);Implies(s2,s1)] | _ -> raise (System.Exception "Non-equivalency in equivalency list!"))) Set.empty equivalencies)
 
-//let st1 = Implies(Assert(pred_A),Not(Assert(pred_B)))
-//printfn "The contrapositive of the statement \"%O\" is \"%O\"." st1 (contrapositive st1)
-//printfn "The inverse of the statement \"%O\" is \"%O\"." st1 (inverse st1)
-//printfn "The converse of the statement \"%O\" is \"%O\"." st1 (converse st1)
+(*
+ * The predicates and axioms
+ *)
 
-let the_axioms = Set.ofList [
-                   Assert(pred_A);
-                   Implies(Assert(pred_A),Not(Assert(pred_B)))
-                   Implies(Not(Assert(pred_B)),Assert(pred_C))
-                   Implies (Assert pred_D, Assert pred_B)
-                 ]
+let pred_A = { Name="A"; Desc="x is a Human" }
+let pred_B = { Name="B"; Desc="x is a Man" }
+let pred_C = { Name="C"; Desc="x is a Woman" }
+let pred_D = { Name="D"; Desc="x is a Mammal"}
+let pred_E = { Name="E"; Desc="x is a Male"}
 
-printfn "The axioms: "
-print_set the_axioms
+let my_axioms = Set.ofList [
+                            Assert(pred_B);
+                            //Assert(pred_A); Assert(pred_E);
+                            Equivalent (And(Assert pred_A, Assert pred_E), Assert pred_B); // Human Male <=> Man
+                            Implies (Assert pred_A, Assert pred_D) ; // Human => Mammal
+                            Implies (Or(Assert pred_B, Assert pred_C), Assert pred_A); // Man or Woman => Human
+                            Implies (Assert pred_B, Not (Assert pred_C)); // Man => ¬Woman
+                            Implies (Assert pred_C, Not (Assert pred_B))  // Woman => ¬Man
+                            ]
+
+printfn "The axioms:"
+print_set my_axioms
+
+// evaulate a statement under the given axioms
+let rec eval axioms statement =
+    let eval_ = eval axioms // partially apply
+    match statement with
+    | Assert pred -> axioms |> Set.exists (fun ax -> ax=statement)
+    | Not st -> not (eval_ st)
+    | And (s1,s2) -> (eval_ s1) && (eval_ s2)
+    | Or (s1,s2) -> (eval_ s1) || (eval_ s2)
+    | _ -> raise (System.Exception "huh")
 
 // modus ponens, i.e.  ((P=>Q) and P) => Q
 let modus_ponens statement axioms =
     match statement with
     | Implies (S1,S2) -> 
-        match axioms |> Set.exists(fun axiom -> axiom=S1) with
-        | true -> S2
-        | false -> Null
+        if eval axioms S1 then
+            if not (axioms |> Set.exists(fun ax-> ax=S2)) then
+                printfn "[MP] (%O) and %O therefore %O" statement S1 S2
+            S2
+        else
+            Null
     | _ -> Null
 
 // modus tollens, i.e. (P=>Q) and ¬Q) => ¬P
 let modus_tollens statement axioms = 
     match statement with 
     | Implies (S1,S2) ->
-        match axioms |> Set.exists(fun axiom -> (simplify axiom) = (simplify (Not S2))) with
-        | true -> simplify (Not S1)
-        | false -> Null
+        if axioms |> Set.exists(fun axiom -> (simplify axiom) = (simplify (Not S2))) then
+            if not (axioms |> Set.exists(fun ax-> (simplify ax)=simplify (Not S1))) then
+                printfn "[MT] (%O) and %O therefore %O" statement (simplify (Not S2)) (simplify (Not S1))
+            simplify (Not S1)
+        else
+            Null
     | _ -> Null
 
 // apply a rule to a set of axioms to draw conclusions
@@ -124,17 +147,19 @@ let all_rules axioms =
     apply_rule modus_ponens axioms+(apply_rule modus_tollens axioms)
 
 // draw conclusions and print them
-let conclusions = repeat all_rules the_axioms |> Set.filter(fun el -> el <> Null)
+printfn "\nThe steps:"
 
-printfn "The conclusions: "
+let conclusions = (repeat all_rules (expand my_axioms)) |> Set.filter(fun el -> el <> Null)
+
+printfn "\nThe conclusions:"
 print_set conclusions
 
-printfn "\n-- Human readable --"
-printfn "The axioms: "
-the_axioms |> Set.iter(fun el -> printfn "  %O" (el.ToSentence()) )
-printfn "The conclusions: "
-conclusions |> Set.iter(fun el -> printfn "  %O" (el.ToSentence()) )
+// checks for "zero order" contradictions, i.e. the set contains A and ¬A.
+let zero_order_self_consistent statements =
+    statements |> Set.forall( fun s1 -> not (statements |> Set.exists( fun s2 -> match simplify s2 with | Not(s3) when s3=(simplify s1) -> true | _ -> false )))
 
+if not (zero_order_self_consistent conclusions) then
+    printfn "Warning; the conclusions are not self-consistent.\nThis implies the axioms are contradictory somehow."
 
 // stop the program exiting until keydown
-//System.Console.ReadKey() |> ignore
+System.Console.ReadKey() |> ignore
