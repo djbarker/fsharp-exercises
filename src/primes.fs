@@ -13,15 +13,11 @@ let sieve N =
 
     (sieve_impl (seq {2..nmax} |> List.ofSeq) []) |> List.rev
 
-(*
-    Returns the execution time of 'func' applied to 'arg1' in milliseconds and
-    the result in a pair. For functions with more than one argument partial
-    application can be used, e.g. (duration f x) y.
- *)
-let duration func arg1 = 
+// returns the execution time of 'func arg' in milliseconds and the result in a pair.
+let duration func arg = 
     let T = new System.Diagnostics.Stopwatch ()
     T.Start ()
-    (T.ElapsedMilliseconds, func arg1)
+    (T.ElapsedMilliseconds, func arg)
 
 // calculate and store the primes
 let time, primes = duration sieve nmax
