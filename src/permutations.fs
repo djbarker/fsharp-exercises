@@ -8,20 +8,18 @@ let rec permute x =
         let rem y i =
             y |> List.filter (fun j -> j<>i)
 
-        // calculate the permutations of each sublist
-        let sub_perms = x |> List.map (fun i -> permute (rem x i))
+        // prepend the item i to each element of the a' list list
+        let pre y i =
+            y |> List.map (fun y' -> i::y')
 
-        // for each sublist append the removed element to the permuations
-        let perms = List.map2 (fun y i -> (y |> List.map(fun j -> i::j))) sub_perms x
+        // calculate the permutations of each sublist then add the removed item
+        x |> List.collect (fun i -> pre (permute (rem x i)) i )
 
-        // flatten the list structure to a list of each permutation
-        let rec flatten y = 
-            match y with
-            | head :: tail -> head @ flatten(tail)
-            | [] -> []
+let permutations = permute the_list
 
-        // return the list of permutations
-        flatten(perms)
+// sanity check
+let factorial n = seq{1..n} |> Seq.reduce (*)
+assert (List.length permutations = (the_list |> List.length |> factorial))
 
 // print
-(permute the_list) |> Seq.iter (printfn "%A")
+permutations |> Seq.iter (printfn "%A")
