@@ -24,7 +24,7 @@ let pop x =
  *) 
 type Brackets = 
     | Paren  = 0
-    | Curley = 1
+    | Curly = 1
     | Square = 2
     | Angle  = 3
 
@@ -48,7 +48,7 @@ let is_valid str =
         str |> Seq.iter (fun char -> 
                 char 
                 |> handle_bracket '(' ')' Brackets.Paren
-                |> handle_bracket '{' '}' Brackets.Curley
+                |> handle_bracket '{' '}' Brackets.Curly
                 |> handle_bracket '[' ']' Brackets.Square
                 |> handle_bracket '<' '>' Brackets.Angle
                 |> ignore
