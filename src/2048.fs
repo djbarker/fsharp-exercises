@@ -130,13 +130,14 @@ let main argv =
 
     // play the game
     while (count_moves the_grid)>0 do
-        the_grid <- do_move the_grid (get_dirn ())
+        let grid' = do_move the_grid (get_dirn ())
 
-        if not (board_full the_grid) then
-            the_grid <- add_tile the_grid
+        if grid'<>the_grid && not (board_full grid') then
+            the_grid <- add_tile grid'
 
         printf "\n\n\n\n\n\n\n\n\n"
         print_grid the_grid
-        
+   
+    printfn "Game over!"
 
     0 // return an integer exit code
